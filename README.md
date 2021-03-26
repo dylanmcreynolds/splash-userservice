@@ -13,4 +13,4 @@ A fastapi server is included just because it docuemnts APIs so well. You can sta
 
 Once started, you can navigate to the page at `http://localhost:8000/docs`
 
-This project in a very early stage. Te (NSLS-II Scipy Cookiecutter)[https://github.com/NSLS-II/scientific-python-cookiecutter] was used to start the project, but much is not yet being taken advantage of (especially documentation).
+This project in a very early stage. Te [NSLS-II Scipy Cookiecutter](https://github.com/NSLS-II/scientific-python-cookiecutter) was used to start the project, but much is not yet being taken advantage of (especially documentation).
