@@ -18,7 +18,7 @@ ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
 logger = logging.getLogger("users.alshub")
 
 context = ssl.create_default_context()
-context.load_verify_locations(cafile="/home/dmcreynolds/work/userworld/incommonrsaca.pem")
+context.load_verify_locations(cafile="./incommonrsaca.pem")
 
 class ALSHubUserService(UserService):
     """Implementation of UserService backed by http calls to ALSHub
