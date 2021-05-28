@@ -1,6 +1,6 @@
 [run]
 source =
-    userworld
+    splash_userservice
 [report]
 omit =
     */python?.?/*

@@ -2,8 +2,8 @@
 Usage
 =====
 
-Start by importing userworld.
+Start by importing splash_userservice.
 
 .. code-block:: python
 
-    import userworld
+    import splash_userservice

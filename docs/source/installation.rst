@@ -4,4 +4,4 @@ Installation
 
 At the command line::
 
-    $ pip install userworld
+    $ pip install splash_userservice

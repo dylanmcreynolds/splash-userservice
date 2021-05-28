@@ -5,6 +5,6 @@ exclude =
     build,
     dist,
     versioneer.py,
-    userworld/_version.py,
+    splash_userservice/_version.py,
     docs/source/conf.py
 max-line-length = 115

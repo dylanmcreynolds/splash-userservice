@@ -10,7 +10,7 @@ import versioneer
 min_version = (3, 7)
 if sys.version_info < min_version:
     error = """
-userservice does not support Python {0}.{1}.
+splash_userservice does not support Python {0}.{1}.
 Python {2}.{3} and above is required. Check your Python version like so:
 
 python3 --version
@@ -32,7 +32,6 @@ with open(path.join(here, 'requirements.txt')) as requirements_file:
     requirements = [line for line in requirements_file.read().splitlines()
                     if not line.startswith('#')]
 
-
 setup(
     name='userworld',
     version=versioneer.get_version(),
@@ -46,12 +45,12 @@ setup(
     packages=find_packages(exclude=['docs', 'tests']),
     entry_points={
         'console_scripts': [
-            'userservice = userservice.api:app',
+            # 'alshub = uvicorn alshub.api:app',
         ],
     },
     include_package_data=True,
     package_data={
-        'userservice': [
+        'splash_userservice': [
             # When adding files here, remember to update MANIFEST.in as well,
             # or else they will not be included in the distribution on PyPI!
             # 'path/to/data_file',

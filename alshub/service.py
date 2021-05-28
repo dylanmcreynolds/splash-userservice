@@ -6,8 +6,8 @@ from pprint import pprint
 
 from httpx import AsyncClient, codes
 
-from userworld.models import User, AccessGroup
-from userworld.service import UserService, UserNotFound
+from splash_userservice.models import User, AccessGroup
+from splash_userservice.service import splash_userservice, UserNotFound
 
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
@@ -20,12 +20,12 @@ logger = logging.getLogger("users.alshub")
 context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
 
-class ALSHubUserService(UserService):
-    """Implementation of UserService backed by http calls to ALSHub
+class ALSHubsplash_userservice(splash_userservice):
+    """Implementation of splash_userservice backed by http calls to ALSHub
 
     Parameters
     ----------
-    UserService : [type]
+    splash_userservice : [type]
         [description]
     """
     async def get_user(self, orcid: str) -> User:
@@ -54,11 +54,14 @@ class ALSHubUserService(UserService):
 
             user_response_obj = response.json()
             user_lb_id = user_response_obj.get('LBNLID')
+            if not user_lb_id:
+                raise UserNotFound(f'user {orcid} not found in ALSHub or could not communicate')
             info('get_user userinfo for orcid: %s  lbid: %s', 
                 orcid, 
                 user_lb_id)
 
             # query for proposals by lblid, which will become groups
+            groups = []
             response = await ac.get(f"{ALSHUB_PROPOSALBY}/?lb={user_lb_id}")
             if response.status_code != codes.OK:
                 info('error getting user proposals: %s status code: %s message: %s', user_lb_id, response.status_code, response.json())
@@ -119,7 +122,7 @@ async def main():
 
     # add ch to logger
     logger.addHandler(ch)
-    service = ALSHubUserService()
+    service = ALSHubsplash_userservice()
 
     user = await service.get_user("0000-0002-3979-8844")
     access_groups = await service.get_user_proposals("0000-0002-3979-8844")

@@ -8,7 +8,7 @@ from .models import (
     UniqueId
 )
 
-class UserService(ABC):
+class splash_userservice(ABC):
 
     @abstractmethod
     async def get_user(self, id: str) -> User:
