@@ -10,7 +10,7 @@ import versioneer
 min_version = (3, 7)
 if sys.version_info < min_version:
     error = """
-userworld does not support Python {0}.{1}.
+userservice does not support Python {0}.{1}.
 Python {2}.{3} and above is required. Check your Python version like so:
 
 python3 --version
@@ -46,12 +46,12 @@ setup(
     packages=find_packages(exclude=['docs', 'tests']),
     entry_points={
         'console_scripts': [
-            # 'command = some.module:some_function',
+            'userservice = userservice.api:app',
         ],
     },
     include_package_data=True,
     package_data={
-        'userworld': [
+        'userservice': [
             # When adding files here, remember to update MANIFEST.in as well,
             # or else they will not be included in the distribution on PyPI!
             # 'path/to/data_file',
