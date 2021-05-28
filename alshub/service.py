@@ -7,7 +7,7 @@ from pprint import pprint
 from httpx import AsyncClient, codes
 
 from splash_userservice.models import User, AccessGroup
-from splash_userservice.service import splash_userservice, UserNotFound
+from splash_userservice.service import IDType, UserService, UserNotFound
 
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
@@ -20,7 +20,7 @@ logger = logging.getLogger("users.alshub")
 context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
 
-class ALSHubsplash_userservice(splash_userservice):
+class ALSHubService(UserService):
     """Implementation of splash_userservice backed by http calls to ALSHub
 
     Parameters
@@ -28,7 +28,7 @@ class ALSHubsplash_userservice(splash_userservice):
     splash_userservice : [type]
         [description]
     """
-    async def get_user(self, orcid: str) -> User:
+    async def get_user(self, id: str, id_type: IDType) -> User:
         """Return a user object from ALSHub. Makes several calls to ALSHub to assemble user info
         and proposal info, which is used to populate group names.
 
@@ -44,20 +44,24 @@ class ALSHubsplash_userservice(splash_userservice):
         """
         async with AsyncClient(base_url=ALSHUB_BASE, verify=context, timeout=10.0) as ac:
             # query for user information
-            response = await ac.get(f"{ALSHUB_PERSON}/?or={orcid}")
+            if id_type == IDType.email:
+                q_param = "em"
+            else:
+                q_param = "or"
+            response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
 
             if response.status_code == 404:
-                raise UserNotFound(f'user {orcid} not found in ALSHub')
+                raise UserNotFound(f'user {id} not found in ALSHub')
             if response.status_code != codes.OK:
-                info('error getting user: %s status code: %s message: %s', orcid, response.status_code, response.json())
+                info('error getting user: %s status code: %s message: %s', id, response.status_code, response.json())
                 return None
 
             user_response_obj = response.json()
             user_lb_id = user_response_obj.get('LBNLID')
             if not user_lb_id:
-                raise UserNotFound(f'user {orcid} not found in ALSHub or could not communicate')
+                raise UserNotFound(f'user {id} not found in ALSHub or could not communicate')
             info('get_user userinfo for orcid: %s  lbid: %s', 
-                orcid, 
+                id, 
                 user_lb_id)
 
             # query for proposals by lblid, which will become groups
@@ -72,7 +76,7 @@ class ALSHubsplash_userservice(splash_userservice):
                     info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
                 else: 
                     info('get_user userinfo for orcid: %s proposals: %s', 
-                        orcid, 
+                        id, 
                         str(proposals)) 
                 
                     groups = [proposal_id for proposal_id in proposals]
@@ -122,7 +126,7 @@ async def main():
 
     # add ch to logger
     logger.addHandler(ch)
-    service = ALSHubsplash_userservice()
+    service = ALSHubService()
 
     user = await service.get_user("0000-0002-3979-8844")
     access_groups = await service.get_user_proposals("0000-0002-3979-8844")

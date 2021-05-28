@@ -14,7 +14,7 @@ from .models import (
     User,
     UniqueId
 )
-from .service import splash_userservice, UserNotFound
+from .service import IDType, UserService, UserNotFound
 
 
 API_KEY_NAME = "api_key"
@@ -75,18 +75,18 @@ def startup():
 # and make unit tests easier
 this = sys.modules[__name__]
 this.service = {}
-def get_service() -> splash_userservice:
+def get_service() -> UserService:
     if not this.service:
-        from alshub.service import ALSHubsplash_userservice
-        this.service = ALSHubsplash_userservice()
+        from alshub.service import ALSHubService
+        this.service = ALSHubService()
     return this.service
 
 
-@app.get("/api/v1/users/{orcid}")
-async def get_user(orcid: str, user_service: splash_userservice = Depends(get_service), api_key: APIKey = Depends(get_api_key_from_request)) -> User:
+@app.get("/api/v1/users/{id}/{id_type}")
+async def get_user(id: str, id_type: IDType, user_service: UserService = Depends(get_service), api_key: APIKey = Depends(get_api_key_from_request)) -> User:
     await validate_api_key(api_key)
     try:
-        return await user_service.get_user(orcid)
+        return await user_service.get_user(id, id_type)
     except UserNotFound as e:
         raise HTTPException(404, detail=e.args[0]) from e
 

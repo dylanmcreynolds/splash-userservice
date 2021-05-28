@@ -1,17 +1,19 @@
 
 from abc import ABC, abstractmethod
-
+from enum import Enum
 
 from .models import (
-    AccessGroup,
-    User,
-    UniqueId
+    User
 )
 
-class splash_userservice(ABC):
+class IDType(Enum):
+    orcid = "orcid"
+    email = "email"
+
+class UserService(ABC):
 
     @abstractmethod
-    async def get_user(self, id: str) -> User:
+    async def get_user(self, id: str, id_type: IDType) -> User:
         raise NotImplementedError()
 
 class UserNotFound(Exception):
