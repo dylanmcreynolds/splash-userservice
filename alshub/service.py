@@ -20,6 +20,14 @@ logger = logging.getLogger("users.alshub")
 context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
 
+
+staff = {
+    "dyparkinson@lbl.gov": ["bl832"],
+    "dmcreynolds@lbl.gov": ["bl832"],
+    "ahexemer@lbl.gov": ["bl832"],
+    "hkrishnan@lbl.gov": ["bl832"],
+}
+
 class ALSHubService(UserService):
     """Implementation of splash_userservice backed by http calls to ALSHub
 
@@ -64,6 +72,7 @@ class ALSHubService(UserService):
                 id, 
                 user_lb_id)
 
+
             # query for proposals by lblid, which will become groups
             groups = []
             response = await ac.get(f"{ALSHUB_PROPOSALBY}/?lb={user_lb_id}")
@@ -80,7 +89,11 @@ class ALSHubService(UserService):
                         str(proposals)) 
                 
                     groups = [proposal_id for proposal_id in proposals]
-
+            
+            # add staff beamlines to groups list
+            if id_type == IDType.email:
+                beamlines = await self.get_staff_beamlines(id)
+                groups = groups + beamlines
             return User(**{
                 "uid": user_response_obj.get('LBNLID'),
                 "given_name": user_response_obj.get('FirstName'),
@@ -90,6 +103,13 @@ class ALSHubService(UserService):
                 "orcid": user_response_obj.get('orcid'),
                 "groups": groups
             })
+
+    async def get_staff_beamlines(self, email: str) -> List[str]:
+        beamlines = staff.get(email)
+        if beamlines:
+            info(f"Adding beamlines {beamlines} for user {email}")
+            return beamlines
+        return []
 
     async def get_user_proposals(self, orcid: str) -> List[AccessGroup]:
         # query by orcid just to get lbl id
