@@ -6,15 +6,18 @@ from .models import (
     User
 )
 
+
 class IDType(Enum):
     orcid = "orcid"
     email = "email"
+
 
 class UserService(ABC):
 
     @abstractmethod
     async def get_user(self, id: str, id_type: IDType) -> User:
         raise NotImplementedError()
+
 
 class UserNotFound(Exception):
     pass
