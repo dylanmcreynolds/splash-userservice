@@ -8,7 +8,7 @@ from httpx import AsyncClient, codes
 
 from splash_userservice.models import User, AccessGroup
 from splash_userservice.service import IDType, UserService, UserNotFound
-
+from .sandbox import users
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
 ALSHUB_PERSON = "ALSGetPerson"
@@ -28,6 +28,7 @@ staff = {
     "hkrishnan@lbl.gov": ["bl832"],
 }
 
+
 class ALSHubService(UserService):
     """Implementation of splash_userservice backed by http calls to ALSHub
 
@@ -36,6 +37,12 @@ class ALSHubService(UserService):
     splash_userservice : [type]
         [description]
     """
+    is_orcid_sandbox = False
+
+    def __init__(self, is_orcid_sandbox=False) -> None:
+        self.is_orcid_sandbox = is_orcid_sandbox
+        super().__init__()
+
     async def get_user(self, id: str, id_type: IDType) -> User:
         """Return a user object from ALSHub. Makes several calls to ALSHub to assemble user info
         and proposal info, which is used to populate group names.
@@ -50,6 +57,12 @@ class ALSHubService(UserService):
         User
             User instance populate with info from ALSHub requests
         """
+
+        if self.is_orcid_sandbox:
+            for user in users:
+                if id_type == IDType.orcid and user.orcid == id:
+                    return user
+
         async with AsyncClient(base_url=ALSHUB_BASE, verify=context, timeout=10.0) as ac:
             # query for user information
             if id_type == IDType.email:
@@ -61,23 +74,27 @@ class ALSHubService(UserService):
             if response.status_code == 404:
                 raise UserNotFound(f'user {id} not found in ALSHub')
             if response.status_code != codes.OK:
-                info('error getting user: %s status code: %s message: %s', id, response.status_code, response.json())
+                info('error getting user: %s status code: %s message: %s',
+                     id,
+                     response.status_code, response.json())
                 return None
 
             user_response_obj = response.json()
             user_lb_id = user_response_obj.get('LBNLID')
             if not user_lb_id:
                 raise UserNotFound(f'user {id} not found in ALSHub or could not communicate')
-            info('get_user userinfo for orcid: %s  lbid: %s', 
-                id, 
-                user_lb_id)
-
+            info('get_user userinfo for orcid: %s  lbid: %s',
+                 id,
+                 user_lb_id)
 
             # query for proposals by lblid, which will become groups
             groups = []
             response = await ac.get(f"{ALSHUB_PROPOSALBY}/?lb={user_lb_id}")
             if response.status_code != codes.OK:
-                info('error getting user proposals: %s status code: %s message: %s', user_lb_id, response.status_code, response.json())
+                info('error getting user proposals: %s status code: %s message: %s', 
+                     user_lb_id,
+                     response.status_code,
+                     response.json())
             else:
                 proposal_response_obj = response.json()
                 proposals = proposal_response_obj.get('Proposals')
@@ -85,8 +102,8 @@ class ALSHubService(UserService):
                     info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
                 else: 
                     info('get_user userinfo for orcid: %s proposals: %s', 
-                        id, 
-                        str(proposals)) 
+                         id, 
+                         str(proposals)) 
                 
                     groups = [proposal_id for proposal_id in proposals]
             
