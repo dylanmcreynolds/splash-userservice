@@ -6,4 +6,5 @@ RUN pip install -U pip &&        pip install -r /tmp/requirements.txt
 COPY ./ /app
 WORKDIR /app
 RUN pip install .
-CMD ["uvicorn", "splash_userservice.api:app", "--host", "0.0.0.0", "--port", "80"]
+ENV APP_MODULE=splash_userservice.api:app
+# CMD ["uvicorn", "splash_userservice.api:app", "--host", "0.0.0.0", "--port", "80"]
