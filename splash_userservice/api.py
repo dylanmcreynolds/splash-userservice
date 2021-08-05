@@ -13,7 +13,7 @@ from .models import (
     User,
     UniqueId
 )
-from .service import IDType, UserService, UserNotFound
+from .service import CommunicationError, IDType, UserService, UserNotFound
 
 
 API_KEY_NAME = "api_key"
@@ -96,13 +96,14 @@ async def get_user(
         api_key: APIKey = Depends(get_api_key_from_request)) -> User:
 
     await validate_api_key(api_key)
+    logger.info(f"Received request for {id} and {id_type}")
     try:
         return await user_service.get_user(id, id_type)
     except UserNotFound as e:
         raise HTTPException(404, detail=e.args[0]) from e
-    except Exception as e:
+    except CommunicationError as e:
         logger.error("Exception in service", e)
-        raise HTTPException(500, detail=e) from e
+        raise HTTPException(500) from e
 
 
 async def validate_api_key(api_key: str):

@@ -21,3 +21,7 @@ class UserService(ABC):
 
 class UserNotFound(Exception):
     pass
+
+
+class CommunicationError(Exception):
+    pass

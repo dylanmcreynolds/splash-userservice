@@ -5,10 +5,10 @@ import ssl
 from typing import List
 from pprint import pprint
 
-from httpx import AsyncClient, codes
+from httpx import AsyncClient, codes, ConnectError
 
 from splash_userservice.models import User, AccessGroup
-from splash_userservice.service import IDType, UserService, UserNotFound
+from splash_userservice.service import IDType, UserService, UserNotFound, CommunicationError
 from .sandbox import users
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
@@ -74,7 +74,10 @@ class ALSHubService(UserService):
                 q_param = "em"
             else:
                 q_param = "or"
-            response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
+            try:
+                response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
+            except ConnectError as e:
+                raise CommunicationError from e
 
             if response.status_code == 404:
                 raise UserNotFound(f'user {id} not found in ALSHub')
