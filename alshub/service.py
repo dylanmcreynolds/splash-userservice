@@ -1,4 +1,5 @@
 import asyncio
+from enum import Enum
 import logging
 import ssl
 from typing import List
@@ -11,9 +12,11 @@ from splash_userservice.service import IDType, UserService, UserNotFound
 from .sandbox import users
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
+
 ALSHUB_PERSON = "ALSGetPerson"
 ALSHUB_PROPOSAL = "ALSUserProposals"
 ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
+ALSHUB_PERSON_ROLES = "ALSGetPersonRoles"
 
 logger = logging.getLogger("users.alshub")
 
@@ -21,12 +24,12 @@ context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
 
 
-staff = {
-    "dyparkinson@lbl.gov": ["bl832"],
-    "dmcreynolds@lbl.gov": ["bl832"],
-    "ahexemer@lbl.gov": ["bl832"],
-    "hkrishnan@lbl.gov": ["bl832"],
-}
+class BeamlineRoles(str, Enum):
+    scientist = "Scientist"
+    satisfaction_survey = "Satisfaction Survey"
+    scheduler = "Scheduler"
+    beamline_staff = "Beamline Staff"
+    experiment_authorization = "Experiment Authorization"
 
 
 class ALSHubService(UserService):
@@ -73,7 +76,7 @@ class ALSHubService(UserService):
 
             if response.status_code == 404:
                 raise UserNotFound(f'user {id} not found in ALSHub')
-            if response.status_code != codes.OK:
+            if response.is_error:
                 info('error getting user: %s status code: %s message: %s',
                      id,
                      response.status_code, response.json())
@@ -100,7 +103,7 @@ class ALSHubService(UserService):
                 proposals = proposal_response_obj.get('Proposals')
                 if not proposals:
                     info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
-                else: 
+                else:
                     info('get_user userinfo for orcid: %s proposals: %s', 
                          id, 
                          str(proposals)) 
@@ -109,7 +112,7 @@ class ALSHubService(UserService):
             
             # add staff beamlines to groups list
             if id_type == IDType.email:
-                beamlines = await self.get_staff_beamlines(id)
+                beamlines = await self.get_staff_beamlines(ac, id)
                 groups = groups + beamlines
             return User(**{
                 "uid": user_response_obj.get('LBNLID'),
@@ -120,13 +123,6 @@ class ALSHubService(UserService):
                 "orcid": user_response_obj.get('orcid'),
                 "groups": groups
             })
-
-    async def get_staff_beamlines(self, email: str) -> List[str]:
-        beamlines = staff.get(email)
-        if beamlines:
-            info(f"Adding beamlines {beamlines} for user {email}")
-            return beamlines
-        return []
 
     async def get_user_proposals(self, orcid: str) -> List[AccessGroup]:
         # query by orcid just to get lbl id
@@ -142,6 +138,48 @@ class ALSHubService(UserService):
                     "name": proposal.get('ExpID')           
                 }))
             return groups
+
+
+    async def get_staff_beamlines(self, ac: AsyncClient, email: str) -> List[str]:
+
+        response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")
+        beamlines = []
+        if response.is_error:
+            info(f"error asking ALHub for staff roles {email}")
+            return beamlines
+        if response.content:
+            info(f"ALSHub returned no content for roles {email}. So no roles found")
+            return alshub_roles_to_beamline_groups(response.json()["Beamline Roles"]) 
+
+
+def alshub_roles_to_beamline_groups(beamline_roles: List):
+    """
+        ALSHub has a kinda funky structure for reporting beamline roles:
+        {
+                "FirstName": "Zaphod",
+                "LastName": "Beabelbrox",
+                "ORCID": "0000-0002-1817-0042X",
+                "Beamline Roles": [
+                    {
+                        "beamline_id": [
+                            "Scientist",
+                            "Beamline Usage",
+                            "Satisfaction Survey",
+                            "Scheduler",
+                            "Beamline Staff",
+                            "Experiment Authorization",
+                            "RAC Beamline Admin"
+                        ]
+                    }
+                ]
+            }
+        This task here is to report beamlines where the user is a Scientist on the beamline
+    """
+    if beamline_roles:
+        return [list(beamline_role.keys())[0] for beamline_role in beamline_roles
+                if "Scientist" in beamline_role[list(beamline_role.keys())[0]]]
+    else:
+        return []
 
 
 def info(log, *args):
