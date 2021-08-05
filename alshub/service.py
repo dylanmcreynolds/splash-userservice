@@ -76,7 +76,7 @@ class ALSHubService(UserService):
                 q_param = "or"
             try:
                 response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
-            except ConnectError as e:
+            except Exception as e:
                 raise CommunicationError from e
 
             if response.status_code == 404:
