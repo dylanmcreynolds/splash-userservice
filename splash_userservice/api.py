@@ -100,6 +100,8 @@ async def get_user(
         return await user_service.get_user(id, id_type)
     except UserNotFound as e:
         raise HTTPException(404, detail=e.args[0]) from e
+    except Exception as e:
+        raise HTTPException(500, detail=e.args[0]) from e
 
 
 async def validate_api_key(api_key: str):
