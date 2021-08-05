@@ -25,9 +25,9 @@ def test_get_beamline_roles():
                         }
                     ]
                 }
-    beamlines = alshub_roles_to_beamline_groups(roles_response["Beamline Roles"])
+    beamlines = alshub_roles_to_beamline_groups(roles_response["Beamline Roles"], ["Scientist"])
     assert len(beamlines) == 1
     assert beamlines[0] == "beamline1"
 
-    beamlines = alshub_roles_to_beamline_groups([])
+    beamlines = alshub_roles_to_beamline_groups([], ["Scientist"])
     assert len(beamlines) == 0
