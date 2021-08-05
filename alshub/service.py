@@ -77,7 +77,8 @@ class ALSHubService(UserService):
             try:
                 response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
             except Exception as e:
-                raise CommunicationError from e
+                info("!!!! in exception")
+                raise CommunicationError(f"exception talking to {ALSHUB_PERSON}/?{q_param}={id}") from e
 
             if response.status_code == 404:
                 raise UserNotFound(f'user {id} not found in ALSHub')

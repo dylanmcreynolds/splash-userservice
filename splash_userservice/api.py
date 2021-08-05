@@ -102,7 +102,7 @@ async def get_user(
     except UserNotFound as e:
         raise HTTPException(404, detail=e.args[0]) from e
     except CommunicationError as e:
-        logger.error("Exception in service", e)
+        logger.error("Exception in service", e.args[0])
         raise HTTPException(500) from e
 
 
