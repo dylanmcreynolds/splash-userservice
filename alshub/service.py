@@ -1,4 +1,5 @@
 import asyncio
+from enum import Enum
 import logging
 import ssl
 from typing import List
@@ -11,9 +12,13 @@ from splash_userservice.service import IDType, UserService, UserNotFound
 from .sandbox import users
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
+
 ALSHUB_PERSON = "ALSGetPerson"
 ALSHUB_PROPOSAL = "ALSUserProposals"
 ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
+ALSHUB_PERSON_ROLES = "ALSGetPersonRoles"
+
+ALSHUB_APPROVAL_ROLES = ["Scientist", "Portal Beamline Admin"]
 
 logger = logging.getLogger("users.alshub")
 
@@ -21,12 +26,12 @@ context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
 
 
-staff = {
-    "dyparkinson@lbl.gov": ["bl832"],
-    "dmcreynolds@lbl.gov": ["bl832"],
-    "ahexemer@lbl.gov": ["bl832"],
-    "hkrishnan@lbl.gov": ["bl832"],
-}
+class BeamlineRoles(str, Enum):
+    scientist = "Scientist"
+    satisfaction_survey = "Satisfaction Survey"
+    scheduler = "Scheduler"
+    beamline_staff = "Beamline Staff"
+    experiment_authorization = "Experiment Authorization"
 
 
 class ALSHubService(UserService):
@@ -44,8 +49,8 @@ class ALSHubService(UserService):
         super().__init__()
 
     async def get_user(self, id: str, id_type: IDType) -> User:
-        """Return a user object from ALSHub. Makes several calls to ALSHub to assemble user info
-        and proposal info, which is used to populate group names.
+        """Return a user object from ALSHub. Makes several calls to ALSHub to assemble user info,
+        beamline membership and proposal info, which is used to populate group names.
 
         Parameters
         ----------
@@ -73,7 +78,7 @@ class ALSHubService(UserService):
 
             if response.status_code == 404:
                 raise UserNotFound(f'user {id} not found in ALSHub')
-            if response.status_code != codes.OK:
+            if response.is_error:
                 info('error getting user: %s status code: %s message: %s',
                      id,
                      response.status_code, response.json())
@@ -90,8 +95,8 @@ class ALSHubService(UserService):
             # query for proposals by lblid, which will become groups
             groups = []
             response = await ac.get(f"{ALSHUB_PROPOSALBY}/?lb={user_lb_id}")
-            if response.status_code != codes.OK:
-                info('error getting user proposals: %s status code: %s message: %s', 
+            if response.is_error:
+                info('error getting user proposals: %s status code: %s message: %s',
                      user_lb_id,
                      response.status_code,
                      response.json())
@@ -100,16 +105,16 @@ class ALSHubService(UserService):
                 proposals = proposal_response_obj.get('Proposals')
                 if not proposals:
                     info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
-                else: 
+                else:
                     info('get_user userinfo for orcid: %s proposals: %s', 
                          id, 
                          str(proposals)) 
-                
+
                     groups = [proposal_id for proposal_id in proposals]
-            
+
             # add staff beamlines to groups list
             if id_type == IDType.email:
-                beamlines = await self.get_staff_beamlines(id)
+                beamlines = await self.get_staff_beamlines(ac, id)
                 groups = groups + beamlines
             return User(**{
                 "uid": user_response_obj.get('LBNLID'),
@@ -121,27 +126,48 @@ class ALSHubService(UserService):
                 "groups": groups
             })
 
-    async def get_staff_beamlines(self, email: str) -> List[str]:
-        beamlines = staff.get(email)
-        if beamlines:
-            info(f"Adding beamlines {beamlines} for user {email}")
+    async def get_staff_beamlines(self, ac: AsyncClient, email: str) -> List[str]:
+        response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")
+        beamlines = []
+        if response.is_error:
+            info(f"error asking ALHub for staff roles {email}")
             return beamlines
-        return []
+        if response.content:
+            info(f"ALSHub returned no content for roles {email}. So no roles found")
+            return alshub_roles_to_beamline_groups(response.json()["Beamline Roles"], ALSHUB_APPROVAL_ROLES) 
 
-    async def get_user_proposals(self, orcid: str) -> List[AccessGroup]:
-        # query by orcid just to get lbl id
-        user = await self.get_user(orcid)
-        info('get_user_accessgroups userinfo for orcid %s', orcid)
-        async with AsyncClient(base_url=ALSHUB_BASE, verify=context, timeout=10.0) as ac:
-            response = await ac.get(f"{ALSHUB_PROPOSAL}/?em={user.current_email}")
-            response_obj = response.json()
-            groups = []
-            for proposal in response_obj.get('Proposals'):
-                groups.append(AccessGroup(**{
-                    "uid": proposal.get('ExpID'),
-                    "name": proposal.get('ExpID')           
-                }))
-            return groups
+
+def alshub_roles_to_beamline_groups(beamline_roles: List, approval_roles: List):
+    """
+        ALSHub has a kinda funky structure for reporting beamline roles:
+        {
+                "FirstName": "Zaphod",
+                "LastName": "Beabelbrox",
+                "ORCID": "0000-0002-1817-0042X",
+                "Beamline Roles": [
+                    {
+                        "beamline_id": [
+                            "Scientist",
+                            "Beamline Usage",
+                            "Satisfaction Survey",
+                            "Scheduler",
+                            "Beamline Staff",
+                            "Experiment Authorization",
+                            "RAC Beamline Admin"
+                        ]
+                    }
+                ]
+            }
+        This task here is to report beamlines where the user is a Scientist on the beamline
+    """
+    accessable_beamlines = []
+    if beamline_roles:
+        for beamline_role in beamline_roles:
+            beamline_id = list(beamline_role.keys())[0]
+            for approval_role in approval_roles:
+                if approval_role in beamline_role[beamline_id]:
+                    accessable_beamlines.append(list(beamline_role.keys())[0])
+    return accessable_beamlines
 
 
 def info(log, *args):
@@ -149,29 +175,3 @@ def info(log, *args):
         logger.info(log, *args)
 
 
-async def main():
-    logger.setLevel(logging.DEBUG)
-    # create console handler and set level to debug
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-
-    # create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # add formatter to ch
-    ch.setFormatter(formatter)
-
-    # add ch to logger
-    logger.addHandler(ch)
-    service = ALSHubService()
-
-    user = await service.get_user("0000-0002-3979-8844")
-    access_groups = await service.get_user_proposals("0000-0002-3979-8844")
-    
-    pprint(user)
-
-    print("============")
-    pprint(access_groups)
-
-if __name__ == "__main__":
-    asyncio.run(main())
