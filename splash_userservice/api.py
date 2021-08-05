@@ -101,7 +101,8 @@ async def get_user(
     except UserNotFound as e:
         raise HTTPException(404, detail=e.args[0]) from e
     except Exception as e:
-        raise HTTPException(500, detail=e.args[0]) from e
+        logger.error("Exception in service", e)
+        raise HTTPException(500, detail=e) from e
 
 
 async def validate_api_key(api_key: str):
