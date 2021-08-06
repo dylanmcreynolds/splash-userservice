@@ -77,7 +77,6 @@ class ALSHubService(UserService):
             try:
                 response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
             except Exception as e:
-                info("!!!! in exception")
                 raise CommunicationError(f"exception talking to {ALSHUB_PERSON}/?{q_param}={id}") from e
 
             if response.status_code == 404:
@@ -119,7 +118,8 @@ class ALSHubService(UserService):
             # add staff beamlines to groups list
             if id_type == IDType.email:
                 beamlines = await self.get_staff_beamlines(ac, id)
-                groups = groups + beamlines
+                if beamlines:
+                    groups = groups + beamlines
             return User(**{
                 "uid": user_response_obj.get('LBNLID'),
                 "given_name": user_response_obj.get('FirstName'),
