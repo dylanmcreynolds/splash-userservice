@@ -21,10 +21,6 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install
-      shell: bash -l {0}
-      run: source continuous_integration/scripts/install.sh
-
     - name: Install test requirements
       shell: bash -l {0}
       run: |
