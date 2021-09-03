@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from .models import (
+from splash_userservice.models import (
     User
 )
 
@@ -19,9 +19,8 @@ class UserService(ABC):
         raise NotImplementedError()
 
 
-class UserNotFound(Exception):
+class CommunicationError(Exception):
     pass
 
-
-class CommunicationError(Exception):
+class UserNotFound(Exception):
     pass

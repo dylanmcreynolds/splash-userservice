@@ -9,11 +9,11 @@ from fastapi.security.api_key import APIKeyQuery, APIKeyCookie, APIKeyHeader, AP
 from pydantic import BaseModel, Field
 from starlette.config import Config
 from starlette.status import HTTP_403_FORBIDDEN
-from .models import (
+from splash_userservice.models import (
     User,
     UniqueId
 )
-from .service import CommunicationError, IDType, UserService, UserNotFound
+from splash_userservice.service import CommunicationError, IDType, UserService, UserNotFound
 
 
 API_KEY_NAME = "api_key"

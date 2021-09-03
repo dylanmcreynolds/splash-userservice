@@ -7,6 +7,7 @@ from pprint import pprint
 
 from httpx import AsyncClient, codes, ConnectError
 
+from alshub.config.beamline_admins import ADMINS
 from splash_userservice.models import User, AccessGroup
 from splash_userservice.service import IDType, UserService, UserNotFound, CommunicationError
 from .sandbox import users
@@ -18,7 +19,7 @@ ALSHUB_PROPOSAL = "ALSUserProposals"
 ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
 ALSHUB_PERSON_ROLES = "ALSGetPersonRoles"
 
-ALSHUB_APPROVAL_ROLES = ["Scientist", "Portal Beamline Admin"]
+ALSHUB_APPROVAL_ROLES = ["Scientist"]
 
 logger = logging.getLogger("users.alshub")
 
@@ -109,9 +110,9 @@ class ALSHubService(UserService):
                 if not proposals:
                     info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
                 else:
-                    info('get_user userinfo for orcid: %s proposals: %s', 
-                         id, 
-                         str(proposals)) 
+                    info('get_user userinfo for lblid: %s proposals: %s', 
+                         user_response_obj.get('LBNLID'),
+                         str(proposals))
 
                     groups = [proposal_id for proposal_id in proposals]
 
@@ -132,16 +133,24 @@ class ALSHubService(UserService):
 
     async def get_staff_beamlines(self, ac: AsyncClient, email: str) -> List[str]:
         response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")
+        
+        # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
+        # ALSHub
         beamlines = []
+        if ADMINS:
+            beamlines = ADMINS[email]
         if response.is_error:
             info(f"error asking ALHub for staff roles {email}")
             return beamlines
         if response.content:
+            alshub_beamlines = alshub_roles_to_beamline_groups(response.json()["Beamline Roles"], ALSHUB_APPROVAL_ROLES)
+            return beamlines + alshub_beamlines
+        else:
             info(f"ALSHub returned no content for roles {email}. So no roles found")
-            return alshub_roles_to_beamline_groups(response.json()["Beamline Roles"], ALSHUB_APPROVAL_ROLES) 
+            return beamlines
 
 
-def alshub_roles_to_beamline_groups(beamline_roles: List, approval_roles: List):
+def alshub_roles_to_beamline_groups(beamline_roles: List, approval_roles: List) -> List[str]:
     """
         ALSHub has a kinda funky structure for reporting beamline roles:
         {
