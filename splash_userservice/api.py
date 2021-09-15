@@ -20,7 +20,6 @@ API_KEY_NAME = "api_key"
 QUERY_USERs_API = 'query_users'
 config = Config(".env")
 API_KEY = config("API_KEY", cast=str, default="")
-IS_ORCID_SANDBOX = config("IS_ORCID_SANDBOX", cast=bool, default=False)
 
 api_key_query = APIKeyQuery(name=API_KEY_NAME, auto_error=False)
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
@@ -43,6 +42,7 @@ async def get_api_key_from_request(
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN, detail="Could not validate credentials, missing APIKey"
         )
+
 
 class GroupSummary(BaseModel):
     group_id: UniqueId
@@ -84,7 +84,7 @@ this.service = {}
 def get_service() -> UserService:
     if not this.service:
         from alshub.service import ALSHubService
-        this.service = ALSHubService(is_orcid_sandbox=IS_ORCID_SANDBOX)
+        this.service = ALSHubService()
     return this.service
 
 
@@ -92,6 +92,7 @@ def get_service() -> UserService:
 async def get_user(
         id: str,
         id_type: IDType,
+        fetch_groups: bool = False,
         user_service: UserService = Depends(get_service),
         api_key: APIKey = Depends(get_api_key_from_request)) -> User:
 

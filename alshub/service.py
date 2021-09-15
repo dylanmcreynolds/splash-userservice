@@ -1,19 +1,16 @@
-import asyncio
+
 from enum import Enum
 import logging
 import ssl
 from typing import List
-from pprint import pprint
-
-from httpx import AsyncClient, codes, ConnectError
+from httpx import AsyncClient
 
 from alshub.config.beamline_admins import ADMINS
-from splash_userservice.models import User, AccessGroup
+from splash_userservice.models import User
 from splash_userservice.service import IDType, UserService, UserNotFound, CommunicationError
-from .sandbox import users
+
 
 ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
-
 ALSHUB_PERSON = "ALSGetPerson"
 ALSHUB_PROPOSAL = "ALSUserProposals"
 ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
@@ -21,10 +18,23 @@ ALSHUB_PERSON_ROLES = "ALSGetPersonRoles"
 
 ALSHUB_APPROVAL_ROLES = ["Scientist"]
 
+ESAF_BASE = "https://als-esaf.lbl.gov"
+ESAF_INFO = "EsafInformation/GetESAF"
+
 logger = logging.getLogger("users.alshub")
 
 context = ssl.create_default_context()
 context.load_verify_locations(cafile="./incommonrsaca.pem")
+
+
+def info(log, *args):
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(log, *args)
+
+
+def debug(log, *args):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(log, *args)
 
 
 class BeamlineRoles(str, Enum):
@@ -45,11 +55,10 @@ class ALSHubService(UserService):
     """
     is_orcid_sandbox = False
 
-    def __init__(self, is_orcid_sandbox=False) -> None:
-        self.is_orcid_sandbox = is_orcid_sandbox
+    def __init__(self) -> None:
         super().__init__()
 
-    async def get_user(self, id: str, id_type: IDType) -> User:
+    async def get_user(self, id: str, id_type: IDType, fetch_groups=True) -> User:
         """Return a user object from ALSHub. Makes several calls to ALSHub to assemble user info,
         beamline membership and proposal info, which is used to populate group names.
 
@@ -64,19 +73,16 @@ class ALSHubService(UserService):
             User instance populate with info from ALSHub requests
         """
 
-        if self.is_orcid_sandbox:
-            for user in users:
-                if id_type == IDType.orcid and user.orcid == id:
-                    return user
-
-        async with AsyncClient(base_url=ALSHUB_BASE, verify=context, timeout=10.0) as ac:
+        user_lb_id = None
+        groups = set()
+        async with AsyncClient(base_url=ALSHUB_BASE, verify=context, timeout=10.0) as alsusweb_client:
             # query for user information
             if id_type == IDType.email:
                 q_param = "em"
             else:
                 q_param = "or"
             try:
-                response = await ac.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
+                response = await alsusweb_client.get(f"{ALSHUB_PERSON}/?{q_param}={id}")
             except Exception as e:
                 raise CommunicationError(f"exception talking to {ALSHUB_PERSON}/?{q_param}={id}") from e
 
@@ -96,31 +102,27 @@ class ALSHubService(UserService):
                  id,
                  user_lb_id)
 
-            # query for proposals by lblid, which will become groups
-            groups = []
-            response = await ac.get(f"{ALSHUB_PROPOSALBY}/?lb={user_lb_id}")
-            if response.is_error:
-                info('error getting user proposals: %s status code: %s message: %s',
-                     user_lb_id,
-                     response.status_code,
-                     response.json())
-            else:
-                proposal_response_obj = response.json()
-                proposals = proposal_response_obj.get('Proposals')
-                if not proposals:
-                    info('no proposals for lbnlid: %s', user_response_obj.get('LBNLID'))
-                else:
-                    info('get_user userinfo for lblid: %s proposals: %s', 
-                         user_response_obj.get('LBNLID'),
-                         str(proposals))
-
-                    groups = [proposal_id for proposal_id in proposals]
-
             # add staff beamlines to groups list
             if id_type == IDType.email:
-                beamlines = await self.get_staff_beamlines(ac, id)
+                beamlines = await self.get_staff_beamlines(alsusweb_client, id)
                 if beamlines:
                     groups = groups + beamlines
+            if not fetch_groups:
+                return User(**{
+                    "uid": user_response_obj.get('LBNLID'),
+                    "given_name": user_response_obj.get('FirstName'),
+                    "family_name": user_response_obj.get('LastName'),
+                    "current_institution": user_response_obj.get('Institution'),
+                    "current_email": user_response_obj.get('OrgEmail'),
+                    "orcid": user_response_obj.get('orcid')
+                })
+            proposals = await get_user_proposals(alsusweb_client, user_lb_id)
+            groups.update(proposals)
+
+            async with AsyncClient(base_url=ESAF_BASE, verify=context, timeout=10.0) as esaf_client:
+                esafs = await get_user_esafs(esaf_client, user_lb_id)
+                groups.update(esafs)
+
             return User(**{
                 "uid": user_response_obj.get('LBNLID'),
                 "given_name": user_response_obj.get('FirstName'),
@@ -128,26 +130,69 @@ class ALSHubService(UserService):
                 "current_institution": user_response_obj.get('Institution'),
                 "current_email": user_response_obj.get('OrgEmail'),
                 "orcid": user_response_obj.get('orcid'),
-                "groups": groups
+                "groups": list(groups)
             })
 
-    async def get_staff_beamlines(self, ac: AsyncClient, email: str) -> List[str]:
-        response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")
-        
-        # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
-        # ALSHub
-        beamlines = []
-        if ADMINS:
-            beamlines = ADMINS[email]
-        if response.is_error:
-            info(f"error asking ALHub for staff roles {email}")
-            return beamlines
-        if response.content:
-            alshub_beamlines = alshub_roles_to_beamline_groups(response.json()["Beamline Roles"], ALSHUB_APPROVAL_ROLES)
-            return beamlines + alshub_beamlines
+
+async def get_user_proposals(client, lbl_id):
+    response = await client.get(f"{ALSHUB_PROPOSALBY}/?lb={lbl_id}")
+    if response.is_error:
+        info('error getting user proposals: %s status code: %s message: %s',
+             lbl_id,
+             response.status_code,
+             response.json())
+        return {}
+    else:
+        proposal_response_obj = response.json()
+        proposals = proposal_response_obj.get('Proposals')
+        if not proposals:
+            info('no proposals for lbnlid: %s', lbl_id)
+            return []
         else:
-            info(f"ALSHub returned no content for roles {email}. So no roles found")
-            return beamlines
+            info('get_user userinfo for lblid: %s proposals: %s', 
+                 lbl_id,
+                 str(proposals))
+
+            return {proposal_id for proposal_id in proposals}
+
+
+async def get_user_esafs(client, lbl_id):
+    response = await client.get(f"{ESAF_INFO}/?lb={lbl_id}")
+    if response.is_error:
+        info('error getting user esafs: %s status code: %s message: %s',
+             lbl_id,
+             response.status_code,
+             response.json())
+    else:
+        esafs = response.json()
+        if not esafs or len(esafs) == 0:
+            info('no proposals for lbnlid: %s', lbl_id)
+        else:
+            debug('get_user userinfo for lblid: %s proposals: %s', 
+                  lbl_id,
+                  str(esafs))
+
+            return {esaf["ProposalFriendlyId"] for esaf in esafs}
+
+
+async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
+    response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")  
+    # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
+    # ALSHub
+    beamlines = []
+    if ADMINS:
+        beamlines = ADMINS[email]
+    if response.is_error:
+        info(f"error asking ALHub for staff roles {email}")
+        return beamlines
+    if response.content:
+        alshub_beamlines = alshub_roles_to_beamline_groups(
+                            response.json()["Beamline Roles"],
+                            ALSHUB_APPROVAL_ROLES)
+        return beamlines + alshub_beamlines
+    else:
+        info(f"ALSHub returned no content for roles {email}. So no roles found")
+        return beamlines
 
 
 def alshub_roles_to_beamline_groups(beamline_roles: List, approval_roles: List) -> List[str]:
@@ -181,10 +226,3 @@ def alshub_roles_to_beamline_groups(beamline_roles: List, approval_roles: List) 
                 if approval_role in beamline_role[beamline_id]:
                     accessable_beamlines.append(list(beamline_role.keys())[0])
     return accessable_beamlines
-
-
-def info(log, *args):
-    if logger.isEnabledFor(logging.INFO):
-        logger.info(log, *args)
-
-
