@@ -181,7 +181,7 @@ async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
     # ALSHub
     beamlines = set()
     if ADMINS:
-        beamlines |= ADMINS[email]
+        beamlines.update(ADMINS[email])
     if response.is_error:
         info(f"error asking ALHub for staff roles {email}")
         return beamlines
