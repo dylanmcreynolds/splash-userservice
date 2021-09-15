@@ -104,9 +104,9 @@ class ALSHubService(UserService):
 
             # add staff beamlines to groups list
             if id_type == IDType.email:
-                beamlines = await self.get_staff_beamlines(alsusweb_client, id)
+                beamlines = await get_staff_beamlines(alsusweb_client, id)
                 if beamlines:
-                    groups = groups + beamlines
+                    groups.update(beamlines)
             if not fetch_groups:
                 return User(**{
                     "uid": user_response_obj.get('LBNLID'),
@@ -179,9 +179,9 @@ async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
     response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")  
     # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
     # ALSHub
-    beamlines = []
+    beamlines = set()
     if ADMINS:
-        beamlines = ADMINS[email]
+        beamlines |= ADMINS[email]
     if response.is_error:
         info(f"error asking ALHub for staff roles {email}")
         return beamlines
@@ -189,7 +189,8 @@ async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
         alshub_beamlines = alshub_roles_to_beamline_groups(
                             response.json()["Beamline Roles"],
                             ALSHUB_APPROVAL_ROLES)
-        return beamlines + alshub_beamlines
+        beamlines |= set(alshub_beamlines)
+        return beamlines
     else:
         info(f"ALSHub returned no content for roles {email}. So no roles found")
         return beamlines
