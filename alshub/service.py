@@ -117,7 +117,7 @@ class ALSHubService(UserService):
                     "orcid": user_response_obj.get('orcid')
                 })
             proposals = await get_user_proposals(alsusweb_client, user_lb_id)
-            if propsoals:
+            if proposals:
                 groups.update(proposals)
     
             async with AsyncClient(base_url=ESAF_BASE, verify=context, timeout=10.0) as esaf_client:
