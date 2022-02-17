@@ -4,13 +4,15 @@ import logging
 import ssl
 from typing import List
 from httpx import AsyncClient
+from starlette.config import Config
 
 from alshub.config.beamline_admins import ADMINS
 from splash_userservice.models import User
 from splash_userservice.service import IDType, UserService, UserNotFound, CommunicationError
 
+config = Config(".env")
+ALSHUB_BASE = config.get("ALSHUB_BASE", cast=str, default="https://alsusweb.lbl.gov:1024")
 
-ALSHUB_BASE = "https://alsusweb.lbl.gov:1024"
 ALSHUB_PERSON = "ALSGetPerson"
 ALSHUB_PROPOSAL = "ALSUserProposals"
 ALSHUB_PROPOSALBY = "ALSGetProposalsBy"
@@ -18,7 +20,7 @@ ALSHUB_PERSON_ROLES = "ALSGetPersonRoles"
 
 ALSHUB_APPROVAL_ROLES = ["Scientist"]
 
-ESAF_BASE = "https://als-esaf.lbl.gov"
+ESAF_BASE = config.get("ESAF_BASE", cast=str, default="https://als-esaf.als.lbl.gov")
 ESAF_INFO = "EsafInformation/GetESAF"
 
 logger = logging.getLogger("users.alshub")
