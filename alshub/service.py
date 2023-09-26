@@ -11,7 +11,7 @@ from splash_userservice.models import User
 from splash_userservice.service import IDType, UserService, UserNotFound, CommunicationError
 
 config = Config(".env")
-ALSHUB_BASE = config.get("ALSHUB_BASE", cast=str, default="https://alsusweb.lbl.gov:1024")
+ALSHUB_BASE = config.get("ALSHUB_BASE", cast=str, default="https://alsusweb.lbl.gov")
 
 ALSHUB_PERSON = "ALSGetPerson"
 ALSHUB_PROPOSAL = "ALSUserProposals"
@@ -105,6 +105,7 @@ class ALSHubService(UserService):
                  user_lb_id)
 
             # add staff beamlines to groups list
+            # if id_type == IDType.email:
             beamlines = await get_staff_beamlines(alsusweb_client, id)
             if beamlines:
                 groups.update(beamlines)
@@ -178,15 +179,15 @@ async def get_user_esafs(client, lbl_id):
             return {esaf["ProposalFriendlyId"] for esaf in esafs}
 
 
-async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
-    response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?em={email}")  
+async def get_staff_beamlines(ac: AsyncClient, orcid: str) -> List[str]:
+    response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?or={orcid}")  
     # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
     # ALSHub
     beamlines = set()
     if ADMINS:
-        beamlines.update(ADMINS[email])
+        beamlines.update(ADMINS[orcid])
     if response.is_error:
-        info(f"error asking ALHub for staff roles {email}")
+        info(f"error asking ALHub for staff roles {orcid}")
         return beamlines
     if response.content:
         alshub_beamlines = alshub_roles_to_beamline_groups(
@@ -195,7 +196,7 @@ async def get_staff_beamlines(ac: AsyncClient, email: str) -> List[str]:
         beamlines |= set(alshub_beamlines)
         return beamlines
     else:
-        info(f"ALSHub returned no content for roles {email}. So no roles found")
+        info(f"ALSHub returned no content for roles {orcid}. So no roles found")
         return beamlines
 
 
