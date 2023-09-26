@@ -105,10 +105,9 @@ class ALSHubService(UserService):
                  user_lb_id)
 
             # add staff beamlines to groups list
-            if id_type == IDType.email:
-                beamlines = await get_staff_beamlines(alsusweb_client, id)
-                if beamlines:
-                    groups.update(beamlines)
+            beamlines = await get_staff_beamlines(alsusweb_client, id)
+            if beamlines:
+                groups.update(beamlines)
             if not fetch_groups:
                 return User(**{
                     "uid": user_response_obj.get('LBNLID'),
