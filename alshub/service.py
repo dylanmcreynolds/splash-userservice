@@ -106,7 +106,7 @@ class ALSHubService(UserService):
 
             # add staff beamlines to groups list
             # if id_type == IDType.email:
-            beamlines = await get_staff_beamlines(alsusweb_client, id)
+            beamlines = await get_staff_beamlines(alsusweb_client, id, user_response_obj['OrgEmail'])
             if beamlines:
                 groups.update(beamlines)
             if not fetch_groups:
@@ -179,13 +179,13 @@ async def get_user_esafs(client, lbl_id):
             return {esaf["ProposalFriendlyId"] for esaf in esafs}
 
 
-async def get_staff_beamlines(ac: AsyncClient, orcid: str) -> List[str]:
+async def get_staff_beamlines(ac: AsyncClient, orcid: str, email: str) -> List[str]:
     response = await ac.get(f"{ALSHUB_PERSON_ROLES}/?or={orcid}")  
     # ADMINS are a list maintained in a python to add users to groups even if they're not maintained in 
     # ALSHub
     beamlines = set()
     if ADMINS:
-        beamlines.update(ADMINS[orcid])
+        beamlines.update(ADMINS[email])
     if response.is_error:
         info(f"error asking ALHub for staff roles {orcid}")
         return beamlines
